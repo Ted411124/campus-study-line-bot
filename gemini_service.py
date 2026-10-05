@@ -70,7 +70,16 @@ def get_study_help(user_prompt: str) -> str:
 
         model_name = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
         fallback_model = os.getenv("GEMINI_FALLBACK_MODEL", "gemini-3.7-flash")
-        client = genai.Client(api_key=api_key)
+        # Bound each model request so a slow API response cannot outlive the
+        # LINE webhook/Gunicorn request window. A single attempt per model keeps
+        # the primary + fallback path under Render's default worker timeout.
+        client = genai.Client(
+            api_key=api_key,
+            http_options=types.HttpOptions(
+                timeout=8_000,
+                retry_options=types.HttpRetryOptions(attempts=1),
+            ),
+        )
 
         generation_config = types.GenerateContentConfig(
             system_instruction=STUDY_ASSISTANT_SYSTEM_PROMPT,
@@ -88,15 +97,17 @@ def get_study_help(user_prompt: str) -> str:
             # Gemini may temporarily return 503 when a model is overloaded.
             # Retry with another free-tier Flash model in that case.
             error_text = str(primary_error)
-            is_temporary_overload = (
+            error_type = type(primary_error).__name__.lower()
+            is_temporary_service_issue = (
                 getattr(primary_error, "code", None) == 503
                 or "503 UNAVAILABLE" in error_text
+                or "timeout" in error_type
             )
-            if not is_temporary_overload or fallback_model == model_name:
+            if not is_temporary_service_issue or fallback_model == model_name:
                 raise
 
             logger.warning(
-                "Gemini model %s returned 503; retrying with fallback model %s.",
+                "Gemini model %s failed temporarily; trying fallback model %s.",
                 model_name,
                 fallback_model,
             )
