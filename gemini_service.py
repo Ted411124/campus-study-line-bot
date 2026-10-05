@@ -69,17 +69,42 @@ def get_study_help(user_prompt: str) -> str:
         from google.genai import types
 
         model_name = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
+        fallback_model = os.getenv("GEMINI_FALLBACK_MODEL", "gemini-3.7-flash")
         client = genai.Client(api_key=api_key)
 
-        response = client.models.generate_content(
-            model=model_name,
-            contents=cleaned_input,
-            config=types.GenerateContentConfig(
-                system_instruction=STUDY_ASSISTANT_SYSTEM_PROMPT,
-                temperature=0.7,
-                max_output_tokens=1500,
-            ),
+        generation_config = types.GenerateContentConfig(
+            system_instruction=STUDY_ASSISTANT_SYSTEM_PROMPT,
+            temperature=0.7,
+            max_output_tokens=1500,
         )
+
+        try:
+            response = client.models.generate_content(
+                model=model_name,
+                contents=cleaned_input,
+                config=generation_config,
+            )
+        except Exception as primary_error:
+            # Gemini may temporarily return 503 when a model is overloaded.
+            # Retry with another free-tier Flash model in that case.
+            error_text = str(primary_error)
+            is_temporary_overload = (
+                getattr(primary_error, "code", None) == 503
+                or "503 UNAVAILABLE" in error_text
+            )
+            if not is_temporary_overload or fallback_model == model_name:
+                raise
+
+            logger.warning(
+                "Gemini model %s returned 503; retrying with fallback model %s.",
+                model_name,
+                fallback_model,
+            )
+            response = client.models.generate_content(
+                model=fallback_model,
+                contents=cleaned_input,
+                config=generation_config,
+            )
 
         reply_text = response.text or "小幫手未能生成有效回答，請換個方式再問一次看看！"
         
