@@ -76,7 +76,7 @@ def get_study_help(user_prompt: str) -> str:
         client = genai.Client(
             api_key=api_key,
             http_options=types.HttpOptions(
-                timeout=8_000,
+                timeout=10_000,
                 retry_options=types.HttpRetryOptions(attempts=1),
             ),
         )
