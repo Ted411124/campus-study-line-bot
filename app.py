@@ -22,6 +22,9 @@ from linebot.v3.messaging import (
     MessagingApi,
     ReplyMessageRequest,
     TextMessage,
+    QuickReply,
+    QuickReplyItem,
+    MessageAction,
 )
 from linebot.v3.webhooks import (
     MessageEvent,
@@ -129,7 +132,39 @@ def handle_text_message(event: MessageEvent):
             line_bot_api.reply_message(
                 ReplyMessageRequest(
                     reply_token=reply_token,
-                    messages=[TextMessage(text=reply_text)]
+                    messages=[
+                        TextMessage(
+                            text=reply_text,
+                            quick_reply=QuickReply(
+                                items=[
+                                    QuickReplyItem(
+                                        action=MessageAction(
+                                            label="解釋課業概念",
+                                            text="請用簡單的方式解釋一個課業概念，並舉例。",
+                                        )
+                                    ),
+                                    QuickReplyItem(
+                                        action=MessageAction(
+                                            label="分析解題步驟",
+                                            text="我有一道課業題想問，請先問我要題目，再一步一步引導我解題。",
+                                        )
+                                    ),
+                                    QuickReplyItem(
+                                        action=MessageAction(
+                                            label="程式除錯",
+                                            text="我有程式錯誤，請先問我要程式碼和錯誤訊息，再幫我逐步找原因。",
+                                        )
+                                    ),
+                                    QuickReplyItem(
+                                        action=MessageAction(
+                                            label="出練習題",
+                                            text="請先問我要練習的科目或主題，再出一題練習題並附解題步驟。",
+                                        )
+                                    ),
+                                ]
+                            ),
+                        )
+                    ]
                 )
             )
         logger.info("已成功回覆使用者訊息。")
