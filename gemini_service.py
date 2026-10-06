@@ -68,8 +68,8 @@ def get_study_help(user_prompt: str) -> str:
         from google import genai
         from google.genai import types
 
-        model_name = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
-        fallback_model = os.getenv("GEMINI_FALLBACK_MODEL", "gemini-3.7-flash")
+        model_name = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+        fallback_model = os.getenv("GEMINI_FALLBACK_MODEL", "gemini-2.0-flash")
         # Bound each model request so a slow API response cannot outlive the
         # LINE webhook/Gunicorn request window. A single attempt per model keeps
         # the primary + fallback path under Render's default worker timeout.
