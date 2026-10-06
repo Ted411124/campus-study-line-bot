@@ -87,36 +87,28 @@ def get_study_help(user_prompt: str) -> str:
             max_output_tokens=1500,
         )
 
-        try:
-            response = client.models.generate_content(
-                model=model_name,
-                contents=cleaned_input,
-                config=generation_config,
-            )
-        except Exception as primary_error:
-            # Gemini may temporarily return 503 when a model is overloaded.
-            # Retry with another free-tier Flash model in that case.
-            error_text = str(primary_error)
-            error_type = type(primary_error).__name__.lower()
-            is_temporary_service_issue = (
-                getattr(primary_error, "code", None) == 503
-                or "503 UNAVAILABLE" in error_text
-                or "timeout" in error_type
-            )
-            if not is_temporary_service_issue or fallback_model == model_name:
-                raise
+	try:
+    	response = client.models.generate_content(
+        	model=model_name,
+        	contents=cleaned_input,
+        	config=generation_config,
+    	)
+	except Exception as primary_error:
+    	# 只要主力模型失敗（不管 503、504 或任何 API 異常），且有設定備用模型，就直接切換！
+    	if not fallback_model or fallback_model == model_name:
+        	raise primary_error
 
-            logger.warning(
-                "Gemini model %s failed temporarily; trying fallback model %s.",
-                model_name,
-                fallback_model,
-            )
-            response = client.models.generate_content(
-                model=fallback_model,
-                contents=cleaned_input,
-                config=generation_config,
-            )
-
+    	logger.warning(
+        	"Gemini model %s failed temporarily (%s); trying fallback model %s.",
+        	model_name,
+        	primary_error,
+        	fallback_model,
+    	)
+    	response = client.models.generate_content(
+        	model=fallback_model,
+        	contents=cleaned_input,
+        	config=generation_config,
+    	)
         reply_text = response.text or "小幫手未能生成有效回答，請換個方式再問一次看看！"
         
         # 4. LINE 訊息長度安全截斷（LINE 單則文字上限為 5000 字元）
