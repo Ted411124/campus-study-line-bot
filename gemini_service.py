@@ -103,12 +103,12 @@ def get_study_help(user_prompt: str) -> str:
         			model_name,
         			primary_error,
         			fallback_model,
-    		)
+    			)
     		response = client.models.generate_content(
         			model=fallback_model,
         			contents=cleaned_input,
         			config=generation_config,
-    		)
+    			)
         reply_text = response.text or "小幫手未能生成有效回答，請換個方式再問一次看看！"
         
         # 4. LINE 訊息長度安全截斷（LINE 單則文字上限為 5000 字元）
