@@ -1,122 +1,67 @@
 import os
-import sys
+import time
 import logging
-from typing import Optional
+from google import genai
+from google.genai import types
+from google.genai.errors import APIError
 
-from dotenv import load_dotenv
-
-# 解決 Windows 控制台預設編碼 (如 CP950) 輸出 Emoji 或特殊符號時的編碼錯誤
-if sys.platform == "win32":
-    try:
-        if sys.stdout and hasattr(sys.stdout, "reconfigure"):
-            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-        if sys.stderr and hasattr(sys.stderr, "reconfigure"):
-            sys.stderr.reconfigure(encoding="utf-8", errors="replace")
-    except Exception:
-        pass
-
-# 載入 .env 環境變數
-load_dotenv()
-
-# 設定日誌記錄
 logger = logging.getLogger(__name__)
 
-# 限制設定
-MIN_INPUT_LENGTH = 2
-MAX_INPUT_LENGTH = 500
-MAX_LINE_MESSAGE_LENGTH = 4500
+# 初始化 API Client
+api_key = os.environ.get("GEMINI_API_KEY")
+client = genai.Client(api_key=api_key) if api_key else None
 
-# 課業助教專屬 System Prompt
-STUDY_ASSISTANT_SYSTEM_PROMPT = """你是一位大學「校園課業小幫手」AI 助教。
-你的任務是協助大學生解決各學科與程式設計的課業疑問。
-
-請遵守以下回答準則：
-1. 【引導思考與結構化】：給予清晰的條列說明、邏輯觀念或解題步驟，不要只丟死板的答案。
-2. 【程式碼規範】：若問題涉及程式設計，請提供排版乾淨、包含詳細中文註解的範例，並解釋核心邏輯。
-3. 【手機閱讀體驗】：因使用者是在 LINE 上閱讀，請善用空行、條列符號（如 1. 2. 或 •），避免一次輸出一整大段密集文字。
-4. 【語言】：請一律使用繁體中文（台灣常用詞彙，如：程式碼、專案、演算法）。
-5. 【友善鼓勵】：保持親切、專業、富有鼓勵性的助教口吻。
-"""
-
-def get_study_help(user_prompt: str) -> str:
+def get_study_help(user_input: str) -> str:
     """
-    接收使用者的課業問題，進行輸入檢查後呼叫 Gemini API 產生回答。
-    
-    :param user_prompt: 使用者在 LINE 輸入的文字
-    :return: 準備回傳給使用者的文字訊息
+    呼叫 Gemini API 處理課業問題，包含 Google Search Grounding 與 429 延遲重試機制
     """
-    cleaned_input = user_prompt.strip()
-    
-    # 1. 輸入長度檢查防呆
-    if len(cleaned_input) < MIN_INPUT_LENGTH:
-        return "👋 請輸入更具體的課業問題或科目觀念（至少 2 個字）喔！例如：「請解釋什麼是二元搜尋樹」"
-    
-    if len(cleaned_input) > MAX_INPUT_LENGTH:
-        return (
-            f"⚠️ 為了保證小幫手能精準理解，發問字數請精簡在 {MAX_INPUT_LENGTH} 字內。\n"
-            f"目前字數為 {len(cleaned_input)} 字，請簡化重點後再發問一次喔！"
-        )
+    if not client:
+        logger.error("GEMINI_API_KEY 未設定")
+        return "系統未設定 API Key，請聯繫管理員。"
 
-    # 2. 檢查環境變數金鑰
-    api_key = os.getenv("GEMINI_API_KEY")
-    if not api_key or api_key == "your_gemini_api_key_here":
-        logger.error("GEMINI_API_KEY 未設定或仍為範本預設值。")
-        return "⚠️ 【系統提醒】尚未設定有效的 Gemini API Key。請專案擁有者於 .env 檔案中填入金鑰。"
+    primary_model = os.environ.get("GEMINI_MODEL", "gemini-3.8-flash")
+    fallback_model = os.environ.get("GEMINI_FALLBACK_MODEL", "gemini-3.5-flash-lite")
 
-    # 3. 呼叫 Gemini API
-    try:
-        from google import genai
-        from google.genai import types
+    # 啟用 Google Search Grounding 搜尋連網
+    config = types.GenerateContentConfig(
+        tools=[types.Tool(google_search=types.GoogleSearch())]
+    )
 
-        model_name = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
-        fallback_model = os.getenv("GEMINI_FALLBACK_MODEL", "gemini-2.0-flash")
-        # Bound each model request so a slow API response cannot outlive the
-        # LINE webhook/Gunicorn request window. A single attempt per model keeps
-        # the primary + fallback path under Render's default worker timeout.
-        client = genai.Client(
-            api_key=api_key,
-            http_options=types.HttpOptions(
-                timeout=10_000,
-                retry_options=types.HttpRetryOptions(attempts=1),
-            ),
-        )
+    # 嘗試順序：[主力模型第1次, 主力模型重試, 備用模型第1次, 備用模型重試]
+    attempts = [
+        (primary_model, 0),    # 主力模型，立即執行
+        (primary_model, 4),    # 主力模型撞 429，等待 4 秒後重試
+        (fallback_model, 2),   # 切換備用模型，等待 2 秒緩衝
+        (fallback_model, 4)    # 備用模型撞 429，等待 4 秒後重試
+    ]
 
-        generation_config = types.GenerateContentConfig(
-            system_instruction=STUDY_ASSISTANT_SYSTEM_PROMPT,
-            temperature=0.7,
-            max_output_tokens=1500,
-        )
+    for model_name, wait_seconds in attempts:
+        if wait_seconds > 0:
+            logger.info(f"觸發防刷/退避機制，等待 {wait_seconds} 秒後重試模型: {model_name}...")
+            time.sleep(wait_seconds)
 
-	try:
-    		response = client.models.generate_content(
-        		model=model_name,
-        		contents=cleaned_input,
-        		config=generation_config,
-    		)
-	except Exception as primary_error:
-    		# 只要主力模型失敗（不管 503、504 或任何 API 異常），且有設定備用模型，就直接切換！
-    		if not fallback_model or fallback_model == model_name:
-        		raise primary_error
+        try:
+            logger.info(f"正在使用模型 {model_name} 產生回覆...")
+            response = client.models.generate_content(
+                model=model_name,
+                contents=user_input,
+                config=config
+            )
+            
+            if response and response.text:
+                return response.text
 
-    		logger.warning(
-        		"Gemini model %s failed temporarily (%s); trying fallback model %s.",
-        		model_name,
-        		primary_error,
-        		fallback_model,
-    		)
-    		response = client.models.generate_content(
-        		model=fallback_model,
-        		contents=cleaned_input,
-        		config=generation_config,
-    		)
-        reply_text = response.text or "小幫手未能生成有效回答，請換個方式再問一次看看！"
-        
-        # 4. LINE 訊息長度安全截斷（LINE 單則文字上限為 5000 字元）
-        if len(reply_text) > MAX_LINE_MESSAGE_LENGTH:
-            reply_text = reply_text[:MAX_LINE_MESSAGE_LENGTH] + "\n\n...(因訊息長度上限，後續內容已省略)..."
+        except APIError as e:
+            # 專門擷取 429 限速錯誤，繼續進行下一輪退避重試
+            if e.code == 429 or "RESOURCE_EXHAUSTED" in str(e):
+                logger.warning(f"模型 {model_name} 遇到 429 頻率限制 (RESOURCE_EXHAUSTED)，準備切換/重試...")
+                continue
+            else:
+                logger.error(f"呼叫 Gemini API 時發生其他 API 錯誤 ({model_name}): {e}")
+                # 若為其他非 429 錯誤（如 404），則直接嘗試下一個模型
+                continue
+        except Exception as e:
+            logger.error(f"呼叫 Gemini API 時發生未知例外 ({model_name}): {e}")
+            continue
 
-        return reply_text.strip()
-
-    except Exception as e:
-        logger.exception("呼叫 Gemini API 時發生異常: %s", str(e))
-        return "抱歉！小幫手在思考時遇到了一點連線或系統小異常，請稍候 30 秒再發問一次看看～"
+    return "抱歉！目前系統存取較為繁忙，請稍候 10~20 秒再試一次～"
