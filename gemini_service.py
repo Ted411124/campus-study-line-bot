@@ -13,7 +13,7 @@ client = genai.Client(api_key=api_key) if api_key else None
 
 def get_study_help(user_input: str) -> str:
     """
-    呼叫 Gemini API 處理課業問題，包含 Google Search Grounding 與 429 延遲重試機制
+    呼叫 Gemini API 處理課業問題，包含 Google Search Grounding 與 429 精簡重試機制
     """
     if not client:
         logger.error("GEMINI_API_KEY 未設定")
@@ -27,17 +27,15 @@ def get_study_help(user_input: str) -> str:
         tools=[types.Tool(google_search=types.GoogleSearch())]
     )
 
-    # 嘗試順序：[主力模型第1次, 主力模型重試, 備用模型第1次, 備用模型重試]
+    # 精簡重試順序（控制在 5 秒之內，避免 LINE Webhook 超時）
     attempts = [
-        (primary_model, 0),    # 主力模型，立即執行
-        (primary_model, 4),    # 主力模型撞 429，等待 4 秒後重試
-        (fallback_model, 2),   # 切換備用模型，等待 2 秒緩衝
-        (fallback_model, 4)    # 備用模型撞 429，等待 4 秒後重試
+        (primary_model, 0),    # 第1次：主力模型直接試
+        (fallback_model, 2),   # 第2次：撞 429 則切換備用模型，等待 2 秒
     ]
 
     for model_name, wait_seconds in attempts:
         if wait_seconds > 0:
-            logger.info(f"觸發防刷/退避機制，等待 {wait_seconds} 秒後重試模型: {model_name}...")
+            logger.info(f"觸發防刷/退避機制，等待 {wait_seconds} 秒後嘗試模型: {model_name}...")
             time.sleep(wait_seconds)
 
         try:
@@ -52,13 +50,11 @@ def get_study_help(user_input: str) -> str:
                 return response.text
 
         except APIError as e:
-            # 專門擷取 429 限速錯誤，繼續進行下一輪退避重試
             if e.code == 429 or "RESOURCE_EXHAUSTED" in str(e):
                 logger.warning(f"模型 {model_name} 遇到 429 頻率限制 (RESOURCE_EXHAUSTED)，準備切換/重試...")
                 continue
             else:
                 logger.error(f"呼叫 Gemini API 時發生其他 API 錯誤 ({model_name}): {e}")
-                # 若為其他非 429 錯誤（如 404），則直接嘗試下一個模型
                 continue
         except Exception as e:
             logger.error(f"呼叫 Gemini API 時發生未知例外 ({model_name}): {e}")
