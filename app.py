@@ -105,6 +105,12 @@ def send_line_reply(reply_token: str, reply_text: str, include_quick_reply: bool
                                 text="請列出大學生寫程式最常踩雷的 3 種報錯（如 IndexError、TypeError）與除錯技巧。",
                             )
                         ),
+                        QuickReplyItem(
+                            action=MessageAction(
+                                label="認識陳文盛老師",
+                                text="請介紹國立東華大學陳文盛老師（研究室、學經歷與開課）",
+                            )
+                        ),
                     ]
                 )
 
