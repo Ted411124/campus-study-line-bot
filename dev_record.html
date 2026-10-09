@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>校園課業小幫手 LINE Bot - 專題開發紀錄與成果展示</title>
+    <style>
+        :root {
+            --primary: #06c755;
+            --primary-dark: #059b43;
+            --bg-dark: #0f172a;
+            --card-dark: #1e293b;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --accent-blue: #38bdf8;
+            --accent-purple: #c084fc;
+            --border-color: #334155;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            line-height: 1.6;
+            scroll-behavior: smooth;
+        }
+
+        /* 導覽列 */
+        nav {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--border-color);
+            z-index: 1000;
+            padding: 16px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .nav-logo {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--primary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            text-decoration: none;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 20px;
+            list-style: none;
+        }
+
+        .nav-links a {
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 0.95rem;
+            transition: color 0.2s;
+        }
+
+        .nav-links a:hover {
+            color: var(--text-main);
+        }
+
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 100px 20px 60px;
+        }
+
+        /* Hero 區塊 */
+        .hero {
+            text-align: center;
+            padding: 40px 0 60px;
+        }
+
+        .hero-badge {
+            display: inline-block;
+            padding: 6px 16px;
+            background: rgba(6, 199, 85, 0.15);
+            color: var(--primary);
+            border-radius: 9999px;
+            font-size: 0.875rem;
+            font-weight: 600;
+            margin-bottom: 20px;
+            border: 1px solid rgba(6, 199, 85, 0.3);
+        }
+
+        .hero h1 {
+            font-size: 2.75rem;
+            font-weight: 800;
+            margin-bottom: 16px;
+            letter-spacing: -0.025em;
+            background: linear-gradient(135deg, #ffffff 0%, #cbd5e1 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .hero p {
+            font-size: 1.15rem;
+            color: var(--text-muted);
+            max-width: 700px;
+            margin: 0 auto 32px;
+        }
+
+        .btn-group {
+            display: flex;
+            justify-content: center;
+            gap: 16px;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-weight: 600;
+            text-decoration: none;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background-color: var(--primary);
+            color: #ffffff;
+        }
+
+        .btn-primary:hover {
+            background-color: var(--primary-dark);
+            transform: translateY(-2px);
+        }
+
+        .btn-secondary {
+            background-color: var(--card-dark);
+            color: var(--text-main);
+            border: 1px solid var(--border-color);
+        }
+
+        .btn-secondary:hover {
+            border-color: var(--text-muted);
+            transform: translateY(-2px);
+        }
+
+        /* 通用區塊樣式 */
+        section {
+            margin-bottom: 70px;
+        }
+
+        .section-header {
+            margin-bottom: 32px;
+        }
+
+        .section-header h2 {
+            font-size: 1.85rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            color: #ffffff;
+        }
+
+        .section-header p {
+            color: var(--text-muted);
+            font-size: 1rem;
+            margin-top: 6px;
+        }
+
+        .card {
+            background: var(--card-dark);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 24px;
+        }
+
+        .card h3 {
+            font-size: 1.25rem;
+            margin-bottom: 12px;
+            color: var(--accent-blue);
+        }
+
+        /* 網格佈局 */
+        .grid-2 {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 24px;
+        }
+
+        .grid-3 {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+        }
+
+        /* 聊天室模擬 UI */
+        .chat-container {
+            background: #202b3c;
+            border-radius: 16px;
+            border: 1px solid var(--border-color);
+            padding: 20px;
+            max-width: 550px;
+            margin: 0 auto;
+        }
+
+        .chat-bubble {
+            margin-bottom: 16px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .bubble-user {
+            align-items: flex-end;
+        }
+
+        .bubble-bot {
+            align-items: flex-start;
+        }
+
+        .bubble-content {
+            padding: 12px 16px;
+            border-radius: 14px;
+            font-size: 0.95rem;
+            max-width: 85%;
+            word-wrap: break-word;
+        }
+
+        .bubble-user .bubble-content {
+            background: #06c755;
+            color: #ffffff;
+            border-bottom-right-radius: 2px;
+        }
+
+        .bubble-bot .bubble-content {
+            background: #334155;
+            color: #f1f5f9;
+            border-bottom-left-radius: 2px;
+            white-space: pre-line;
+        }
+
+        .bubble-meta {
+            font-size: 0.75rem;
+            color: #64748b;
+            margin-top: 4px;
+        }
+
+        /* 前後對照表格 */
+        .table-responsive {
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.95rem;
+        }
+
+        th, td {
+            padding: 14px 16px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        th {
+            background: rgba(15, 23, 42, 0.7);
+            color: var(--accent-blue);
+            font-weight: 600;
+        }
+
+        tr:hover td {
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .badge-pass {
+            background: rgba(6, 199, 85, 0.2);
+            color: #4ade80;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        .badge-fail {
+            background: rgba(239, 68, 68, 0.2);
+            color: #f87171;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        /* 程式碼區塊 */
+        pre {
+            background: #0b1120;
+            border: 1px solid var(--border-color);
+            padding: 16px;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-family: "Fira Code", Consolas, Monaco, monospace;
+            font-size: 0.9rem;
+            color: #e2e8f0;
+            margin: 12px 0;
+        }
+
+        code {
+            font-family: inherit;
+        }
+
+        /* 頁尾 */
+        footer {
+            text-align: center;
+            padding: 40px 0;
+            border-top: 1px solid var(--border-color);
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+
+        footer a {
+            color: var(--primary);
+            text-decoration: none;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 頂部導覽 -->
+    <nav>
+        <a href="#" class="nav-logo">
+            <span>🎓</span> 校園課業小幫手
+        </a>
+        <ul class="nav-links">
+            <li><a href="#overview">專案架構</a></li>
+            <li><a href="#demo">實測展示</a></li>
+            <li><a href="#refactor">架構重構</a></li>
+            <li><a href="#ai-collab">AI 協作</a></li>
+            <li><a href="#results">測試結果</a></li>
+        </ul>
+    </nav>
+
+    <div class="container">
+        <!-- Hero 區塊 -->
+        <header class="hero">
+            <span class="hero-badge">大學資訊課期末專題成果</span>
+            <h1>校園課業小幫手 LINE Bot</h1>
+            <p>串接 Python Flask、LINE Messaging API 與 Google Gemini 3.8 Flash，打造 24 小時在線的智慧課業助教，全面解決 429 配額與冷啟動瓶頸。</p>
+            <div class="btn-group">
+                <a href="https://github.com/Ted411124/campus-study-line-bot" target="_blank" class="btn btn-primary">
+                    <span>GitHub 專案倉庫</span> ↗
+                </a>
+                <a href="#demo" class="btn btn-secondary">觀看實測展示</a>
+            </div>
+        </header>
+
+        <!-- 1. 專題介紹與架構 -->
+        <section id="overview">
+            <div class="section-header">
+                <h2>🏗️ 專案介紹與技術架構</h2>
+                <p>專為大學生課後自主學習設計，無需額外安裝軟體，直接在最熟悉的 LINE 介面獲得引導式解題。</p>
+            </div>
+
+            <div class="grid-2">
+                <div class="card">
+                    <h3>💡 專案核心動機</h3>
+                    <p>學生在自習與寫程式時經常遭遇卡關，受限於助教 Office Hour 有限與搜尋引擎解答零碎生硬，傳統關鍵字機器人又無法理解自然語言。透過本 Bot 導入生成式 AI，能以啟發性條列方式引導學生思考與除錯。</p>
+                </div>
+                <div class="card">
+                    <h3>🛠️ 技術選型與職責</h3>
+                    <ul style="padding-left: 20px; color: var(--text-muted);">
+                        <li><strong style="color: #fff;">後端服務：</strong>Python 3.13 + Flask 輕量 Web 框架</li>
+                        <li><strong style="color: #fff;">生產級部署：</strong>Gunicorn WSGI + Render.com Free Tier</li>
+                        <li><strong style="color: #fff;">通訊平台：</strong>LINE Messaging API (v3 SDK) 數位簽章驗證</li>
+                        <li><strong style="color: #fff;">AI 模型：</strong>Google Gemini API (gemini-3.8-flash & 3.5-flash-lite)</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3>🔄 訊息生命週期與非同步架構圖</h3>
+                <pre>
+【使用者手機 LINE】 ──(文字/貼圖/圖片)──> 【LINE Webhook Server】
+                                                  │
+                                       (POST /callback + 數位簽章)
+                                                  ▼
+                                      【Flask 後端 (app.py)】
+                                       ├── 1. 檢驗 X-Line-Signature
+                                       ├── 2. 啟動背景線程 (Background Worker)
+                                       └── 3. < 50ms 立即回傳 200 OK 至 LINE ──(杜絕 10s Timeout)
+                                                  │
+                                                  ▼ (背景線程非同步運作)
+                                      【AI 服務 (gemini_service.py)】
+                                       ├── 1. 模糊輸入導引 (0 配額)
+                                       ├── 2. TTL 本機快取查詢 (0.001s 回傳)
+                                       └── 3. 模型瀑布降級 (Primary ➔ Fallback) + 指數退避
+                                                  │
+                                                  ▼ (呼叫 LINE Reply API)
+【使用者手機 LINE 接收解答】 <─────────────── 【LINE MessagingApi】</pre>
+            </div>
+        </section>
+
+        <!-- 2. 操作示範與三種實測情境 -->
+        <section id="demo">
+            <div class="section-header">
+                <h2>🧪 操作示範：三大實測情境解析</h2>
+                <p>嚴謹設計的三種邊界與正常情境，兼顧使用者體驗與系統強健度。</p>
+            </div>
+
+            <div class="grid-3">
+                <!-- 情境 1 -->
+                <div class="card">
+                    <h3>1. 正常課業問答</h3>
+                    <p style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 14px;">測試學科觀念與程式碼示範，產出附帶詳細註解之回答。</p>
+                    <div class="chat-container">
+                        <div class="chat-bubble bubble-user">
+                            <div class="bubble-content">什麼是二元搜尋樹？</div>
+                            <span class="bubble-meta">同學發問</span>
+                        </div>
+                        <div class="chat-bubble bubble-bot">
+                            <div class="bubble-content">同學你好！二元搜尋樹 (BST) 是具備以下特性的資料結構：
+1. 左子樹節點值 < 根節點
+2. 右子樹節點值 > 根節點
+• 時間複雜度平均為 O(log n)。</div>
+                            <span class="bubble-meta">小幫手回答 ⚡</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 情境 2 -->
+                <div class="card">
+                    <h3>2. 模糊不完整輸入</h3>
+                    <p style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 14px;">當使用者只發送「幫我」、「救命」時，立即提供發問範本（0 配額消耗）。</p>
+                    <div class="chat-container">
+                        <div class="chat-bubble bubble-user">
+                            <div class="bubble-content">幫我</div>
+                            <span class="bubble-meta">同學發問</span>
+                        </div>
+                        <div class="chat-bubble bubble-bot">
+                            <div class="bubble-content">👋 收到你的求助訊號了！為了能精準協助你，請提供：
+📌 【詢問科目】：（如：資料結構）
+📌 【具體問題】：（如：遞迴問題）
+📌 【卡點】：（如：報錯訊息）</div>
+                            <span class="bubble-meta">小幫手立即導引 (0ms)</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 情境 3 -->
+                <div class="card">
+                    <h3>3. 不支援媒體防呆</h3>
+                    <p style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 14px;">發送貼圖、圖片或語音時，給予友善提示，引導轉文字提問。</p>
+                    <div class="chat-container">
+                        <div class="chat-bubble bubble-user">
+                            <div class="bubble-content">[傳送了一張題目照片 📷]</div>
+                            <span class="bubble-meta">同學發送</span>
+                        </div>
+                        <div class="chat-bubble bubble-bot">
+                            <div class="bubble-content">收到圖片囉！📷
+小幫手目前專注於文字分析，暫時無法看圖解題。建議將題目文字或代碼貼上發問喔！</div>
+                            <span class="bubble-meta">小幫手防呆回覆</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 3. 架構重構歷程 -->
+        <section id="refactor">
+            <div class="section-header">
+                <h2>🚀 開發瓶頸與改善版架構重構</h2>
+                <p>如實記錄專案從初版遇到 429 與冷啟動，到改善版徹底解決的工程歷程。</p>
+            </div>
+
+            <div class="grid-2">
+                <div class="card">
+                    <h3 style="color: #f87171;">⚠️ 初版面臨的痛點</h3>
+                    <ul style="padding-left: 20px; color: var(--text-muted); line-height: 1.8;">
+                        <li><strong>Gemini 429 配額耗盡：</strong>開啟 Search Grounding 消耗極大，連續發問即撞 RPM/RPD 上限，出現系統繁忙錯誤。</li>
+                        <li><strong>Render 15分鐘冷啟動 (Cold Start)：</strong>喚醒需 20~50 秒，超過 LINE 10 秒回應門檻，導致伺服器斷線已讀不回。</li>
+                        <li><strong>無快取機制：</strong>重複詢問相同觀念不斷重複呼叫 API，浪費寶貴額度。</li>
+                    </ul>
+                </div>
+
+                <div class="card">
+                    <h3 style="color: #4ade80;">✅ 改善版的重構解法</h3>
+                    <ul style="padding-left: 20px; color: var(--text-muted); line-height: 1.8;">
+                        <li><strong>模型瀑布降級 (Model Cascade)：</strong>主要模型撞 429 時，毫秒級自動切換至低延遲輕量備用模型 (Lite)。</li>
+                        <li><strong>指數退避隨機抖動 (Full Jitter)：</strong>依指數遞增等待時間，避免同時間併發打爆 API。</li>
+                        <li><strong>記憶體 TTL 快取 (SimpleTTLCache)：</strong>常見問題直接命中快取，0.001 秒極速回傳且耗損 0 次 API 配額。</li>
+                        <li><strong>背景非同步線程 (Threading Worker)：</strong>收到請求立刻回 200 OK 給 LINE，後台慢慢產出答案，消滅 10s Timeout！</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <!-- 4. AI 協作經驗 -->
+        <section id="ai-collab">
+            <div class="section-header">
+                <h2>🤖 AI 協作經驗與工程實踐</h2>
+                <p>記錄在開發過程中如何與 AI 助理進行 Prompt 調整、程式重構與嚴謹檢查。</p>
+            </div>
+
+            <div class="card">
+                <h3>1. Prompt Engineering（提示詞工程）經驗</h3>
+                <p>初期如果直接使用預設模型，AI 常直接給出過長程式碼或死記硬背的答案。我們設計了專屬的 <strong>STUDY_ASSISTANT_SYSTEM_PROMPT</strong>：</p>
+                <pre><code># 助教規範核心指示
+1. 【引導思考與結構化】：條列步驟與觀念推導，不給作弊式死答案。
+2. 【程式碼排版】：嚴格要求附帶詳細中文註解與核心邏輯說明。
+3. 【手機閱讀體驗】：善用 Emoji 與空行，防範單一訊息超出手機螢幕。</code></pre>
+            </div>
+
+            <div class="card">
+                <h3>2. 資安防護與邊界除錯經驗</h3>
+                <ul style="padding-left: 20px; color: var(--text-muted); line-height: 1.8;">
+                    <li><strong>金鑰絕對防洩漏：</strong>在 `.gitignore` 嚴格將 `.env` 排除，並使用 `git check-ignore` 反覆驗證，保證公開倉庫 100% 乾淨。</li>
+                    <li><strong>Windows 控制台 UTF-8 保護：</strong>在 Windows terminal (CP950) 執行時容易發生 Emoji 編碼崩潰，透過 `sys.stdout.reconfigure(encoding="utf-8")` 徹底解決。</li>
+                    <li><strong>LINE 訊息長度防護：</strong>LINE 單則回覆上限為 5,000 字元，後端在超過 4,000 字元時實施自動安全截斷。</li>
+                </ul>
+            </div>
+        </section>
+
+        <!-- 5. 測試結果矩陣 -->
+        <section id="results">
+            <div class="section-header">
+                <h2>📊 測試結果矩陣（預期 vs 實際）</h2>
+                <p>全模組經過自動化測試與實機測試之驗證結果。</p>
+            </div>
+
+            <div class="card table-responsive">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>測試項目</th>
+                            <th>測試輸入條件</th>
+                            <th>預期行為</th>
+                            <th>實際結果</th>
+                            <th>判定</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>正常概念問答</td>
+                            <td>「什麼是堆疊 (Stack)？」</td>
+                            <td>產生條列式概念、LIFO 原則與範例</td>
+                            <td>完整回傳 1,028 字元之結構化解答</td>
+                            <td><span class="badge-pass">PASS</span></td>
+                        </tr>
+                        <tr>
+                            <td>快取二次命中</td>
+                            <td>連續再次發問「什麼是堆疊？」</td>
+                            <td>命中快取，不消耗 API 配額</td>
+                            <td>⚡ [Cache Hit] 0.001s 瞬間回傳</td>
+                            <td><span class="badge-pass">PASS</span></td>
+                        </tr>
+                        <tr>
+                            <td>模糊發問導引</td>
+                            <td>輸入「幫我」或「救命」</td>
+                            <td>立即彈出三項補充資料範本</td>
+                            <td>格式化引導卡片回傳，耗損 0 配額</td>
+                            <td><span class="badge-pass">PASS</span></td>
+                        </tr>
+                        <tr>
+                            <td>極短輸入防呆</td>
+                            <td>輸入單一字元「好」</td>
+                            <td>提示發問至少 2 個字</td>
+                            <td>成功阻擋並友善回傳發問建議</td>
+                            <td><span class="badge-pass">PASS</span></td>
+                        </tr>
+                        <tr>
+                            <td>貼圖訊息防呆</td>
+                            <td>傳送任意貼圖</td>
+                            <td>回覆文字助教說明並引導發問</td>
+                            <td>成功觸發 StickerMessageContent 處理</td>
+                            <td><span class="badge-pass">PASS</span></td>
+                        </tr>
+                        <tr>
+                            <td>LINE 10s Timeout 防禦</td>
+                            <td>大負載模型運算 (>4 秒)</td>
+                            <td>Webhook 端點需於數十毫秒內回應</td>
+                            <td>Flask 在 35ms 內回傳 200 OK，無逾時</td>
+                            <td><span class="badge-pass">PASS</span></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- 頁尾成果連結 -->
+        <footer>
+            <p>🎓 大學資訊課專題成果 | 校園課業小幫手 LINE Bot</p>
+            <p style="margin-top: 8px;">
+                專案原始碼：<a href="https://github.com/Ted411124/campus-study-line-bot" target="_blank">GitHub Repository (Ted411124/campus-study-line-bot)</a>
+            </p>
+        </footer>
+    </div>
+
+</body>
+</html>

@@ -1,18 +1,26 @@
 # 🎓 校園課業小幫手 LINE Bot (Campus Study Assistant)
 
-這是一個專為大學資訊課專案設計的 **AI 課業輔導 LINE Bot**。後端結合 **Flask**、**LINE Messaging API (v3)** 與 **Google Gemini API**，能扮演課業助教的角色，引導同學思考、解析觀念、排查程式邏輯，提供有架構且易於在手機上閱讀的解答。
+這是一個專為大學資訊課專案設計的 **AI 課業輔導 LINE Bot**。後端採用 **Python (Flask + Gunicorn)** 部署於 **Render 免費版**，整合 **LINE Messaging API (v3)** 與 **Google Gemini API**，能扮演 24 小時在線的課業助教，引導同學思考、解析演算法與觀念、排查程式邏輯，並提供排版乾淨、附帶中文註解的程式範例。
 
 ---
 
-## 🌟 專案特色與安全設計
+## 🌟 核心功能與進階架構優化（改善版亮點）
 
-1. **嚴謹的 Webhook 數位簽章驗證**：透過 LINE 官方 SDK (`WebhookHandler`) 檢驗 `X-Line-Signature`，確保請求百分之百來自 LINE 官方伺服器，拒絕偽造與未授權的 HTTP 請求。
-2. **金鑰絕不硬編碼 (No Hardcoded Secrets)**：採用 `python-dotenv` 讀取環境變數，並在 `.gitignore` 中將 `.env` 列入黑名單，保護 API Key 與 Token 安全。
-3. **輸入防呆與長度限制**：
-   - 最少輸入 2 個字：避免空白或無意義單字觸發 API 呼叫。
-   - 上限 500 個字：防止過長 Prompt 耗費額度或偏離主題。
-4. **健全的錯誤處理與降級回覆 (Graceful Degradation)**：當遭遇網路異常、API 配額上限或未設定金鑰時，伺服器不中斷崩潰，並友善回傳提示訊息給使用者。
-5. **長度截斷防護**：自動監控回答長度，確保在 LINE 5000 字元限制內完整送出。
+專案在經歷初期部署與實測後，已完成針對 **Gemini 429 配額限制** 與 **Render 冷啟動逾時** 的深度架構重構：
+
+1. **429 Too Many Requests 防禦架構**：
+   - **模型瀑布式降級 (Model Cascade)**：優先使用反應迅速、配額穩定之模型（如 `gemini-3.8-flash`），撞牆 429 時自動平滑降級至輕量備用模型（`gemini-3.5-flash-lite` / `gemini-3.1-flash-lite`）。
+   - **記憶體 TTL 快取機制 (In-Memory Cache)**：內建 1 小時過期時間之問答快取，相同或相似課業問題（如「什麼是二元搜尋樹」）命中快取時 **0.001 秒瞬間回傳**，耗損 0 次 API 配額，杜絕重複提問導致的 429。
+   - **指數退避與隨機抖動 (Exponential Backoff with Full Jitter)**：遭遇速率限制時，自動按指數增長結合亂數抖動進行短暫避讓重試。
+2. **LINE Webhook 10 秒 Timeout 徹底根治**：
+   - **背景非同步線程 (Asynchronous Threading)**：Webhook 接收端點在驗證數位簽章後，將耗時的 AI 運算與 LINE 回覆工作丟入背景守護線程 (`threading.Thread`)，並在 **數十毫秒內立即回傳 HTTP 200 OK** 給 LINE 伺服器，從根本上杜絕 LINE 10 秒逾時導致的「已讀不回」與「系統存取較為繁忙」問題。
+3. **三種實測情境全面支援**：
+   - **情境一：正常學科觀念與程式題**（例如「解釋快速排序法」、「示範 Python 遞迴」）提供條列解析與良好註解範例。
+   - **情境二：模糊與不完整輸入導引**（使用者若僅輸入「幫我」、「求助」、「作業」等模糊字眼）立即提供結構化提示範本，引導學生具體發問且**不耗損任何 API 配額**。
+   - **情境三：不支援之多媒體類型友善防呆**（使用者傳送貼圖、圖片、語音、影片或位置時）自動觸發友善回饋，說明目前專注於文字輔導並引導輸入文字。
+4. **企業級資安與金鑰保護**：
+   - 嚴格落實 `X-Line-Signature` 數位簽章 HMAC 驗證。
+   - 真實金鑰完全隔離於本機 `.env` 與 Render 後台私密環境變數中，Git 歷史紀錄 100% 乾淨無洩漏。
 
 ---
 
@@ -20,13 +28,15 @@
 
 ```text
 LINE Bot/
-├── app.py                 # 主要入口：Flask Web 伺服器、Webhook 路由、簽章驗證與事件分發
-├── gemini_service.py      # AI 核心模組：Gemini API 串接、System Prompt、輸入驗證與例外處理
-├── requirements.txt       # 相依套件清單
-├── .env.example           # 環境變數設定範本（安全無金鑰，供設定參考）
-├── .env                   # 本機環境變數真實金鑰（*切勿上傳至 Git*）
+├── app.py                 # 主要入口：Flask Web 伺服器、非同步 Webhook 處理、多媒體防呆路由
+├── gemini_service.py      # AI 核心模組：模型瀑布降級、指數退避、TTL 快取、模糊字詞過濾
+├── requirements.txt       # 相依套件清單 (flask, line-bot-sdk, google-genai, gunicorn 等)
+├── Procfile               # 雲端生產環境開機命令 (web: gunicorn app:app)
+├── .env.example           # 環境變數設定範本（僅含佔位符）
+├── .env                   # 本機環境變數真實金鑰（*絕對嚴禁上傳至 Git*）
 ├── .gitignore             # Git 忽略設定清單
-└── README.md              # 專案說明與執行操作指南
+├── dev_record.html        # 一頁式專題開發歷程與實測成果展示網頁
+└── README.md              # 完整專案說明與操作指南
 ```
 
 ---
@@ -35,7 +45,7 @@ LINE Bot/
 
 ### 步驟 1：建立並啟動 Python 虛擬環境
 
-建議使用 Python 3.10 以上版本。在專案根目錄開啟終端機（PowerShell 或 CMD）：
+建議使用 Python 3.10 以上版本（支援 Python 3.13）。
 
 ```powershell
 # 1. 建立虛擬環境 (名為 venv)
@@ -46,7 +56,7 @@ python -m venv venv
 # （若是 CMD 終端機，請執行：.\venv\Scripts\activate.bat）
 ```
 
-### 步驟 2：安裝專案相依套件
+### 步驟 2：安裝相依套件
 
 ```powershell
 pip install -r requirements.txt
@@ -54,122 +64,106 @@ pip install -r requirements.txt
 
 ### 步驟 3：設定環境變數 (`.env`)
 
-1. 複製範本檔案 `.env.example` 並另存為 `.env`：
-   ```powershell
-   Copy-Item .env.example .env
-   ```
-2. 使用記事本或 VS Code 開啟 `.env`，填入您的金鑰：
+複製範本檔案 `.env.example` 為 `.env`，並填入您的真實金鑰：
+```powershell
+Copy-Item .env.example .env
+```
 
 ```env
-LINE_CHANNEL_SECRET=你的_LINE_Channel_Secret
-LINE_CHANNEL_ACCESS_TOKEN=你的_LINE_Channel_Access_Token
-GEMINI_API_KEY=你的_Google_Gemini_API_Key
+# LINE Developers Console -> Basic settings -> Channel secret
+LINE_CHANNEL_SECRET=YOUR_LINE_CHANNEL_SECRET
+
+# LINE Developers Console -> Messaging API -> Channel access token (long-lived)
+LINE_CHANNEL_ACCESS_TOKEN=YOUR_LINE_CHANNEL_ACCESS_TOKEN
+
+# Google AI Studio -> API Keys
+GEMINI_API_KEY=YOUR_GEMINI_API_KEY
+
+# 選填：自訂模型名稱（預設為 gemini-3.8-flash 與 gemini-3.5-flash-lite）
+GEMINI_MODEL=gemini-3.8-flash
+GEMINI_FALLBACK_MODEL=gemini-3.5-flash-lite
+
+# 伺服器監聽 Port
 PORT=5000
 ```
 
-> 💡 **金鑰去哪裡拿？**
-> - **LINE 金鑰**：登入 [LINE Developers Console](https://developers.line.biz/)，建立一個 Messaging API Channel。在「Basic settings」可找到 `Channel secret`；在「Messaging API」分頁最下方點擊 Issue 取得 `Channel access token (long-lived)`。
-> - **Gemini 金鑰**：前往 [Google AI Studio](https://aistudio.google.com/)，點擊「Get API key」即可免費建立一組金鑰。
-
-### 步驟 4：啟動 Flask 伺服器
+### 步驟 4：本機啟動伺服器
 
 ```powershell
 python app.py
 ```
-若成功啟動，終端機會顯示：
-```text
-[INFO] CampusStudyBot: 校園課業小幫手伺服器即將在 Port 5000 啟動...
- * Running on http://127.0.0.1:5000
-```
-你可以開啟瀏覽器造訪 `http://127.0.0.1:5000`，若看到綠色「伺服器狀態：正常 (Online)」代表本機端已正常運行！
+打開瀏覽器訪問 `http://localhost:5000`，看到綠色「伺服器狀態：正常 (Online)」即表示本機端啟動成功！
 
 ---
 
-## 🌐 讓 LINE 連線到你的電腦：ngrok 設定
+## ☁️ 雲端部署教學 (Render.com - 100% 免費 / 免信用卡)
 
-由於 LINE 官方伺服器需要透過公開 HTTPS 網址才能將訊息推送到你的 Webhook，本機測試需使用 **ngrok**：
-
-1. 前往 [ngrok 官網](https://ngrok.com/) 下載並安裝。
-2. 保持剛才的 `python app.py` 繼續運行，**另開一個新的終端機視窗**，輸入：
-   ```powershell
-   ngrok http 5000
-   ```
-3. ngrok 會產生一組 Forwarding 網址，格式如下：
-   `https://xxxx-xx-xx-xx.ngrok-free.app`
-4. 你的 Webhook 完整 URL 即為：
-   `https://xxxx-xx-xx-xx.ngrok-free.app/callback`
-
----
-
-## 📲 LINE 後台設定步驟
-
-1. 進入 [LINE Developers Console](https://developers.line.biz/) 點選你的 Channel。
-2. 切換到 **Messaging API** 頁籤：
-   - 找到 **Webhook settings**。
-   - **Webhook URL** 填入：`https://你的ngrok網址.ngrok-free.app/callback`。
-   - 開啟 **Use webhook** 開關（轉為綠色開啟狀態）。
-   - 點擊 **Verify** 按鈕：若跳出 `Success` 即表示簽章驗證完全通過！
-3. 進入 [LINE Official Account Manager](https://manager.line.biz/)（官方帳號後台）：
-   - 點選右上角「設定」->「回應設定」。
-   - **回應模式**：選擇「聊天室 (Chat)」。
-   - **Webhook**：選擇「開啟」。
-   - **自動回應訊息**：選擇「關閉」（避免 LINE 原生預設機器人搶話）。
-
----
-
-## 🧪 課堂展示與測試項目
-
-加入自己建立的 LINE 官方帳號好友後，可依序展示以下三種情境：
-
-1. **正常問答展示**：
-   - 輸入：「請用 Python 示範二分搜尋法的邏輯並加上詳細註解」
-   - 預期效果：小幫手條列出觀念、程式碼範例與注意事項。
-2. **防呆邊界測試（字數過短）**：
-   - 輸入：「好」
-   - 預期效果：小幫手回覆提示「請輸入更具體的課業問題或科目觀念（至少 2 個字）喔！」。
-3. **長度限制測試（字數過長）**：
-   - 輸入超過 500 字的文章。
-   - 預期效果：小幫手回覆提示「發問字數請精簡在 500 字內...」。
-
----
-
-## 🛡️ GitHub 上傳安全檢查清單
-
-專案要上傳到 GitHub 交作業前，請務必確認：
-- [x] 是否存在 `.gitignore` 且包含 `.env`？
-- [x] 執行 `git status` 時，確認 `.env` **沒有** 出現在待提交清單中。
-- [x] 提交到 GitHub 的只有 `.env.example`（裡面只放虛構假值，如 `your_line_channel_secret_here`）。
-- [x] 檢查 `git log` 確認歷史紀錄中從未 commit 過任何真實金鑰。
-
----
-
-## ☁️ 雲端公開部署教學 (Render.com - 100% 免費 / 免綁信用卡)
-
-若想讓機器人 24 小時在線（或提供給評審隨時測試），可免費部署至 Render：
-
-### 1. 方案限制與費用確認
-* 選擇方案：**Free Web Service ($0/month)**。
-* **完全免信用卡**：使用 GitHub 帳號註冊登入即可，平台絕不會要求填寫付款資訊。
-* 休眠機制：15 分鐘無人連線會進入省電休眠；有新訊息進來時需約 30~50 秒冷啟動，此為免費方案正常現象。
-
-### 2. 部署操作步驟
-1. 將專案推送到您的 GitHub 公開 Repository（確保 `.env` 未被推送）。
-2. 登入 [Render.com](https://render.com/)，點選 **New +** -> **Web Service**。
-3. 連結您的 GitHub 帳號，並選取本專案 Repository。
-4. 設定服務基本資訊：
-   - **Name**: `campus-study-assistant`（或自訂名稱）
-   - **Language**: `Python 3`
+1. 推送程式碼至您的 GitHub 公開儲存庫（確認 `.env` 未被推送）。
+2. 前往 [Render.com](https://render.com/)，選擇 **New +** -> **Web Service**，連結您的 GitHub 專案。
+3. 設定參數：
+   - **Runtime**: `Python 3`
    - **Build Command**: `pip install -r requirements.txt`
    - **Start Command**: `gunicorn app:app`
-   - **Instance Type**: 務必確認選擇 **Free ($0/month)**
-5. **設定環境變數（極重要：金鑰唯一安全存放處）**：
-   - 滾動到下方點擊 **Environment Variables** -> **Add Environment Variable**。
-   - 逐一新增三個變數（值請填入您自己的真實金鑰，此處由 Render 伺服器端加密保存，外部無法查看）：
-     * `LINE_CHANNEL_SECRET`
-     * `LINE_CHANNEL_ACCESS_TOKEN`
-     * `GEMINI_API_KEY`
-6. 點擊 **Create Web Service**，等待 2-3 分鐘完成建置。
-7. 建置完成後，Render 會在上方提供專屬公開 HTTPS 網址，例如：`https://campus-study-assistant.onrender.com`。
-8. 前往 LINE Developers 後台，將 Webhook URL 更新為：
-   `https://campus-study-assistant.onrender.com/callback`，並點擊 **Verify** 驗證即可！
+   - **Instance Type**: 務必選擇 **Free ($0/month)**
+4. 在 **Environment Variables** 區塊新增 `LINE_CHANNEL_SECRET`、`LINE_CHANNEL_ACCESS_TOKEN`、`GEMINI_API_KEY`。
+5. 建立服務後取得公開 HTTPS 網址（例如 `https://campus-bot.onrender.com`）。
+6. 回到 LINE Developers 後台，設定 Webhook URL 為：
+   `https://campus-bot.onrender.com/callback`，開啟 **Use webhook** 並點擊 **Verify** 驗證。
+7. 在 LINE Official Account Manager 後台關閉「自動回應訊息」，開啟「Webhook」。
 
+---
+
+## ⚠️ 已知限制與最佳解法 (Known Limitations & Workarounds)
+
+### 1. Render 免費版 15 分鐘休眠機制 (Cold Start)
+* **現象**：若 15 分鐘無人連線，Render 會暫時休眠服務。下一次使用者發送訊息時，伺服器需要約 20~50 秒重新開機（冷啟動）。
+* **已實作之防禦**：後端採用背景非同步執行架構，只要請求送達即瞬間回傳 HTTP 200，避免 LINE 伺服器提早斷線。
+* **最佳消除冷啟動解法 (Keep-Alive Ping)**：
+  - 使用免費的定時 Ping 服務（如 [UptimeRobot](https://uptimerobot.com/) 或 [cron-job.org](https://cron-job.org/)）。
+  - 設定每 **10~14 分鐘** 對你的 Render 服務首頁 `https://your-app.onrender.com/` 發送一次 HTTP GET 請求，即可保持伺服器 24 小時溫熱在線，消除冷啟動等待！
+
+### 2. Gemini API 免費配額 (Rate Limits & 429)
+* **現象**：Google AI Studio 免費方案針對每分鐘請求數 (RPM) 及每日請求數 (RPD) 有上限限制。
+* **已實作之防禦**：
+  - 模糊發問（如「幫我」）在本地直接攔截導引，消耗 0 配額。
+  - 記憶體快取命中時在 0.001 秒回傳，消耗 0 配額。
+  - 關閉高耗能的 Google Search Grounding，提升穩定度。
+  - 撞牆時自動平滑切換至輕量備用模型並具備退避重試。
+
+---
+
+## 🧪 三大實測情境展示教學
+
+加入機器人好友後，可實測驗證以下情境：
+
+| 測試情境 | 使用者輸入範例 | 預期系統行為 |
+| :--- | :--- | :--- |
+| **情境一：正常課業問答** | 「請用簡單的方式解釋什麼是二元搜尋樹，並附上 Python 範例」 | 小幫手條列出觀念、時間複雜度，並回傳附帶中文註解的乾淨程式碼與下方快捷選單。 |
+| **情境二：模糊不完整輸入** | 「幫我」、「救命」或「不會寫作業」 | 0 秒瞬間回覆友善導引，條列格式請同學提供「科目、具體題目、目前卡點」，不浪費 API 額度。 |
+| **情境三：不支援之多媒體** | 傳送任意貼圖、圖片、錄音檔 | 立即回覆友善提示，說明目前專注於文字分析，建議將題目文字或代碼貼上發問。 |
+
+---
+
+## 💡 建議 GitHub Commit 訊息範本
+
+為符合軟體工程專案規範，建議將此次重構分次提交，提供以下標準且有意義的 commit 紀錄：
+
+### Commit 1：重構 Gemini 服務以抵禦 429 配額限制
+```bash
+git add gemini_service.py
+git commit -m "refactor(gemini): resolve 429 rate limit with model cascade, exponential backoff, and in-memory TTL caching"
+```
+*說明：引入多層次模型降級、指數退避抖動、TTL 快取與模糊字詞前置攔截機制。*
+
+### Commit 2：優化 Webhook 非同步回覆以根除 10 秒逾時並補全多媒體防呆
+```bash
+git add app.py
+git commit -m "feat(webhook): implement async background worker to eliminate 10s timeout and handle non-text media events"
+```
+*說明：採用非同步執行緒讓 Webhook 在毫秒級回傳 200 OK，並為貼圖、圖片、語音等事件提供友善導引。*
+
+### Commit 3：完善專案文檔與實測情境紀錄
+```bash
+git add README.md dev_record.html
+git commit -m "docs: update architecture documentation, known limitations workarounds, and dev showcase webpage"
+```
