@@ -149,9 +149,9 @@ def get_study_help(user_input: str) -> str:
     seen = set()
     model_cascade = [m for m in model_cascade if not (m in seen or seen.add(m))]
 
-    # 延遲設定 (控制重試在極限安全時間內)
-    base_backoff_delay = 1.0  # 基礎退避秒數
-    max_total_timeout = 8.0   # 總調用保護上限
+    # 延遲設定 (非同步背景線程有充裕時間等待 429 速率窗口恢復，杜絕提前放棄)
+    base_backoff_delay = 2.0  # 基礎退避秒數
+    max_total_timeout = 22.0  # 總調用保護上限 (LINE reply_token 具備 30~60 秒有效期限)
     start_time = time.time()
 
     try:
