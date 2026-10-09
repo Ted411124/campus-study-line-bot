@@ -35,6 +35,7 @@ STUDY_ASSISTANT_SYSTEM_PROMPT = """你是一位大學「校園課業小幫手」
 3. 【手機閱讀體驗】：因使用者是在 LINE 上閱讀，請善用空行、條列符號（如 1. 2. 或 •），避免一次輸出一整大段密集文字。
 4. 【語言】：請一律使用繁體中文（台灣常用詞彙，如：程式碼、專案、演算法）。
 5. 【友善鼓勵】：保持親切、專業、富有鼓勵性的助教口吻。
+6. 【完整作結與篇幅控制】：回答篇幅精煉適中（建議約 500~800 字），必須將列出之所有核心重點完整說明完畢並給予總結，絕對不能話說到一半中斷。
 """
 
 # ==============================================================
@@ -161,11 +162,11 @@ def get_study_help(user_input: str) -> str:
 
         client = genai.Client(api_key=api_key)
         
-        # 輕量快速設定：關閉耗時又耗配額的 Search Grounding，提高生成速度與降低 429 機率
+        # 輕量快速設定：提高輸出 Token 上限至 3000，確保完整說明不被腰斬
         config = types.GenerateContentConfig(
             system_instruction=STUDY_ASSISTANT_SYSTEM_PROMPT,
             temperature=0.7,
-            max_output_tokens=1200,
+            max_output_tokens=3000,
         )
 
         for attempt, model_name in enumerate(model_cascade):
